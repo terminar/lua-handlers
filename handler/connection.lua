@@ -18,5 +18,8 @@
 -- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 -- THE SOFTWARE.
 
-local connection = require"handler.backend.nixio.connection"
+local config = require 'handler.config' or {}
+local backend = config.backend or "nixio";
+
+local connection = require("handler.backend." .. backend .. ".connection")
 return connection

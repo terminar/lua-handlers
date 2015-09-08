@@ -45,11 +45,9 @@ local function chunked()
 	end
 end
 
-module(...)
-
-function new(src)
+---- exports
+local function new(src)
 	return ltn12.filter.chain(src, chunked())
 end
 
-setmetatable(_M, { __call = function(tab, ...) return new(...) end })
-
+return setmetatable({ new = new }, { __call = function(tab, ...) return new(...) end })

@@ -18,5 +18,8 @@
 -- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 -- THE SOFTWARE.
 
-local datagram = require"handler.backend.nixio.datagram"
+local config = require 'handler.config' or {}
+local backend = config.backend or "nixio";
+
+local datagram = require("handler.backend." .. backend .. ".datagram")
 return datagram

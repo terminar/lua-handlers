@@ -83,9 +83,9 @@ local function process_request_body(req)
 
 end
 
-module(...)
+---- exports
 
-function new(client, req, body)
+local function new(client, req, body)
 	if type(req) == 'string' then
 		req = { url = req, body = body, headers = http_headers.dup(client.headers) }
 	else
@@ -151,3 +151,6 @@ function new(client, req, body)
 	return setmetatable(req, request_mt)
 end
 
+return {
+    new = new
+}

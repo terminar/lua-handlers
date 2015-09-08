@@ -304,9 +304,9 @@ local function create_response_parser(self)
 	self.parser = parser
 end
 
-module(...)
 
-function new(loop, pool)
+---- exports
+local function new(loop, pool)
 	local conn = setmetatable({
 		is_closed = false,
 		pool = pool,
@@ -328,5 +328,5 @@ function new(loop, pool)
 	return conn
 end
 
-setmetatable(_M, { __call = function(tab, ...) return new(...) end })
+return setmetatable({new = new }, { __call = function(tab, ...) return new(...) end })
 

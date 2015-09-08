@@ -22,14 +22,14 @@ local setmetatable = setmetatable
 local print = print
 local assert = assert
 
-local nixio = require"nixio"
+--local nixio = require"nixio"
 
 local request = require"handler.http.client.request"
 local hosts = require"handler.http.client.hosts"
 local headers = require"handler.http.headers"
 local headers_new = headers.new
 
-local ev = require"ev"
+--local ev = require"ev"
 
 local client_mt = {}
 client_mt.__index = client_mt
@@ -46,6 +46,8 @@ function client_mt:request(req)
 end
 
 function client_mt:get_tls_context()
+--TODO: TLS
+--[[
 	local tls = self.tls
 	if not tls then
 		-- make default client-side TLS context.
@@ -53,11 +55,11 @@ function client_mt:get_tls_context()
 		self.tls = tls
 	end
 	return tls
+--]]
 end
 
-module(...)
-
-function new(loop, client)
+---- exports
+local function new(loop, client)
 	client = client or {}
 	client.loop = loop
 	client.hosts = hosts.new(client)
@@ -73,7 +75,7 @@ end
 
 local default_client = nil
 -- get default http client.
-function default()
+local function default()
 	if not default_client then
 		-- create a http client.
 		default_client = new(ev.Loop.default)
@@ -82,7 +84,13 @@ function default()
 end
 
 -- initialize default http client.
-function init(loop, client)
+local function init(loop, client)
 	default_client = new(loop, client)
 end
 
+
+return {
+    new = new,
+    default = default,
+    init = init
+}

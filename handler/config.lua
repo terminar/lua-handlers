@@ -1,4 +1,5 @@
 -- Copyright (c) 2010-2011 by Robert G. Jakabosky <bobby@neoawareness.com>
+--               2015      by Bjoern Kalkbrenner <terminar@cyberphoria.org>
 --
 -- Permission is hereby granted, free of charge, to any person obtaining a copy
 -- of this software and associated documentation files (the "Software"), to deal
@@ -18,20 +19,7 @@
 -- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 -- THE SOFTWARE.
 
-local setmetatable = setmetatable
-
-local http_headers = require'handler.http.headers'
-local new_headers = http_headers.new
-
-local response_mt = {}
-response_mt.__index = response_mt
-
----- exports
-local function new()
-	return setmetatable({
-		headers = new_headers(),
-	}, response_mt)
-end
-
-return setmetatable({ new = new }, { __call = function(tab, ...) return new(...) end })
-
+local M = {
+    backend = "nixio"
+};
+return M;

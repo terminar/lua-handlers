@@ -161,16 +161,19 @@ function hosts_cache_mt:queue_request(req)
 	return host:queue_request(req)
 end
 
-module(...)
-
-function new(client)
+---- exports
+local function new(client)
 	return setmetatable({
 		client = client,
 		hosts = {},
 	}, hosts_cache_mt)
 end
 
-function set_max_connections_per_host(max)
+local function set_max_connections_per_host(max)
 	MAX_CONNECTIONS_PER_HOST = max
 end
 
+return {
+    new = new,
+    set_max_connections_per_host = set_max_connections_per_host
+}

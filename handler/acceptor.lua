@@ -18,5 +18,8 @@
 -- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 -- THE SOFTWARE.
 
-local acceptor = require"handler.backend.nixio.acceptor"
+local config = require 'handler.config' or {}
+local backend = config.backend or "nixio";
+
+local acceptor = require("handler.backend." .. backend .. ".acceptor")
 return acceptor
