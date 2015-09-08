@@ -408,7 +408,7 @@ local function sock_recv_data(self,err,data)
             sock_handle_error(self, err)
             return false, err
         end
---    until len >= read_max or self.read_blocked
+--    until len >= read_max or self.read_blocked or self.shutdown_waiting
 
     d("sock_recv_data done");
     return true
