@@ -28,9 +28,6 @@ local d = print
 local uv = require"luv"
 
 --new --================================================================================================================
-local import = require 'core.functions'.import
-local async,wait,wwait,wcont = import('core.fiber',"new","wait","wwait","wcont")
-
 --[[
 local function tcp()
     local new = {
@@ -150,6 +147,13 @@ local function sock_close(self)
 	if not sock then return end
 	self.is_closing = true
 	self.read_blocked = true
+
+    if self.connect_timer then
+        uv.timer_stop(self.connect_timer);
+        uv.close(self.connect_timer);
+        self.connect_timer=nil;
+    end
+
 	if not self.write_buf or self.has_error then
         --[[
 		local loop = self.loop
@@ -338,8 +342,17 @@ end
 
 local function sock_handle_connected(self) --OK
     d("sock_handle_connected")
+
 	local handler = self.handler
 	self.is_connecting = false
+ self.is_connected = true
+
+    if self.connect_timer then
+        uv.timer_stop(self.connect_timer)
+        uv.close(self.connect_timer);
+        self.connect_timer=nil;
+    end
+
 	if handler then
 		local handle_connected = handler.handle_connected
 		if handle_connected then
@@ -408,7 +421,7 @@ local function sock_recv_data(self,err,data)
             sock_handle_error(self, err)
             return false, err
         end
---    until len >= read_max or self.read_blocked or self.shutdown_waiting
+--    until len >= read_max or self.read_blocked
 
     d("sock_recv_data done");
     return true
@@ -518,6 +531,7 @@ local function sock_wrap(loop, handler, sock, is_connected)
 		handler = handler,
 		sock = sock,
 		is_connecting = true,
+        connect_timeout = 15,
 		write_blocked = false,
 		write_timeout = -1,
 		read_blocked = false,
@@ -623,8 +637,6 @@ end
 
 local function sock_new_connect(loop, handler, domain, _type, host, port, laddr, lport)
 
-    d("sock_new_connect")
-
 --TODO: wrap new_socket? with commands?
 -- create nixio socket
 --local sock = new_socket(domain, _type)
@@ -656,54 +668,90 @@ local function sock_new_connect(loop, handler, domain, _type, host, port, laddr,
 
         if _type == "stream" then
 
-            d("getaddrinfo")
+            local cwait=true;
+            local cerr;
             uv.getaddrinfo(host,port,{socktype=_type,family=domain},function(err,res)
-                d("getaddrinfo ready")
 
-                if not res[1] or not res[1].addr or not res[1].port then
-                    err = "Error resolving host or port"
+                if err or not res[1] or not res[1].addr or not res[1].port then
+                    cerr = "Error resolving host or port: " .. err
+                    sock_handle_error(self,cerr);
+                    cwait=false;
+                    return;
                 end
 
-                if err then
-                    d("getaddrinfo handle error")
-                    sock_handle_error(self,err);
-                else
-                    d("calling tcp_connect")
+                d("getaddrinfo ready, calling tcp_connect")
 
-                    -- bind to local laddr/lport
-                    if laddr then
+                -- bind to local laddr/lport
+                if laddr then
+                    --n_assert(sock:setsockopt('socket', 'reuseaddr', 1)) <- automatically set on tcp
 
-                        --n_assert(sock:setsockopt('socket', 'reuseaddr', 1)) <- automatically set on tcp
+                    --TODO: check if it is working
+                    --TODO: getaddrinfo for local
+                    --parameter4 = { ipv6only = true|false}
+                    uv.tcp_bind(self.sock,laddr,tonumber(lport or 0))
 
---TODO: check if it is working
---TODO: getaddrinfo for local
-                        --parameter4 = { ipv6only = true|false}
-                        uv.tcp_bind(self.sock,laddr,tonumber(lport or 0))
-
-                        --udp-bind: parameter4: { reuseaddr = true|false, ipv6only = true|false }
-                        --[[
-                        --reuseaddr:
-                        * This sets the SO_REUSEPORT socket flag on the BSDs and OS X. On other
-                        * UNIX platforms, it sets the SO_REUSEADDR flag. What that means is that
-                        * multiple threads or processes can bind to the same address without error
-                        * (provided they all set the flag) but only the last one to bind will receive
-                        * any traffic, in effect "stealing" the port from the previous listener.
-                        * This behavior is something of an anomaly and may be replaced by an explicit
-                        * opt-in mechanism in future versions of libuv.
-                        --]]
-                    end
-
-                    -- connect to host:port
-                    if _type == "stream" then
-                        uv.tcp_connect(self.sock,res[1].addr,res[1].port,self.callbacks.connected_cb)
-                    end
-
+                    --udp-bind: parameter4: { reuseaddr = true|false, ipv6only = true|false }
+                    --[=[
+                    --reuseaddr:
+                    * This sets the SO_REUSEPORT socket flag on the BSDs and OS X. On other
+                    * UNIX platforms, it sets the SO_REUSEADDR flag. What that means is that
+                    * multiple threads or processes can bind to the same address without error
+                    * (provided they all set the flag) but only the last one to bind will receive
+                    * any traffic, in effect "stealing" the port from the previous listener.
+                    * This behavior is something of an anomaly and may be replaced by an explicit
+                    * opt-in mechanism in future versions of libuv.
+                    --]=]
                 end
-            end);
 
+                -- connect to host:port
+                if self.connect_timer then
+                    uv.timer_stop(self.connect_timer);
+                    uv.close(self.connect_timer);
+                    self.connect_timer=nil;
+                end
+
+                if self.connect_timeout > 0 then
+                    d("Starting connect timeout timer")
+                    self.connect_timer = uv.new_timer()
+                    uv.timer_start(self.connect_timer,self.connect_timeout*1000,0,function()
+                        d("stopping connection!")
+                        uv.timer_stop(self.connect_timer);
+                        uv.close(self.connect_timer)
+                        self.connect_timer=nil;
+                        self.callbacks.connected_cb("Timeout");
+                        cwait=false;
+                    end)
+                end
+
+                uv.tcp_connect(self.sock,res[1].addr,res[1].port, function(err)
+                    if err then
+                        cerr = err;
+                    end
+                    self.callbacks.connected_cb("Timeout");
+                    cwait=false;
+                end);
+
+            end)
+
+            d("blockwait")
+            while cwait do
+                if uv.loop_alive() then
+                    uv.run("nowait")
+                end
+            end
+
+            d("Done starting ConnectAsync")
+            if cerr then
+                d("Got error: " .. cerr);
+            end
 
             d("returning self in sock_new_connect")
-            return self;
+            if not cerr then
+                return self;
+            else
+                return nil,cerr;
+            end
+
         else
 --TODO: implement UDP
 --store gethostaddr for send socket stuff
