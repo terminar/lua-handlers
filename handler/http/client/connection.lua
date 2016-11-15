@@ -101,6 +101,7 @@ end
 function client_mt:handle_data(data, show)
 	local parser = self.parser
 	local bytes_parsed = parser:execute(data)
+
 	if parser:is_upgrade() then
 		-- protocol changing.
 		return
@@ -142,7 +143,6 @@ function client_mt:queue_request(req)
 			self:send_body()
 		end
 	end
-
 	return true
 end
 
@@ -330,6 +330,8 @@ local function create_response_parser(self)
 	self.parser = parser
 end
 
+local write = require 'pl.pretty'.write
+local print = print
 module(...)
 
 function new(pool)
@@ -344,7 +346,7 @@ function new(pool)
 
 	local sock, err
 	if pool.is_https then
-		sock, err = connection.tls_tcp(conn, pool.address, pool.port, tls, true)
+		sock, err = connection.tls_tcp(conn, pool.address, pool.port, pool.client.tls, true)
 	else
 		sock, err = connection.tcp(conn, pool.address, pool.port)
 	end

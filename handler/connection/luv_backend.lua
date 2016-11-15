@@ -23,6 +23,8 @@ local print = print
 local assert = assert
 
 local handler = require"handler"
+local resolver = require"handler.resolver"
+
 local poll = handler.get_poller()
 
 local uv = require"luv"
@@ -32,6 +34,9 @@ local WRITE_LOW  = 8 * 1024
 
 --local tls_backend = require"handler.connection.tls_backend"
 --local sock_tls_wrap = tls_backend.wrap
+
+local luv_tls = require"handler.connection.luv_tls_backend"
+local sock_tls_wrap = luv_tls.wrap
 
 local uri_mod = require"handler.uri"
 local uri_parse = uri_mod.parse
@@ -167,8 +172,18 @@ local function sock_handle_send_unblocked(self)
 end
 
 local function sock_send(self, data)
+	if self.is_connecting then
+		local connect_buf  = self.connect_buf
+		if not connect_buf then
+			self.connect_buf = data
+		else
+			self.connect_buf = connect_buf .. data
+		end
+		return false
+	end
+
 	local num, err, errno = self.sock:write(data, self.on_io_write)
-	if not num then
+    if not num then
 		return false, errno
 	end
 	local write_size = self.sock:write_queue_size()
@@ -180,11 +195,20 @@ local function sock_send(self, data)
 	return true
 end
 
+local function sock_handle_connect_buf(self)
+	local data = self.connect_buf
+	if data then
+		self.connect_buf = false
+		return sock_send(self,data);
+	end
+end
+
 local function sock_handle_connected(self)
 	-- skip if not in connecting state.
 	if not self.is_connecting then return end
 	local handler = self.handler
 	self.is_connecting = false
+    sock_handle_connect_buf(self)
 	if handler then
 		local handle_connected = handler.handle_connected
 		if handle_connected then
@@ -254,7 +278,7 @@ local function sock_write_cb(self, status)
 	if write_size > WRITE_LOW then
 		-- writes still blocked.
 		return
-	end
+    end
 	-- writes unblocked.
 	sock_handle_send_unblocked(self)
 	if not self.is_closing then
@@ -291,6 +315,7 @@ local function sock_wrap(handler, sock, is_connected)
 		handler = handler,
 		sock = sock,
 		is_connecting = true,
+		connect_buf = false,
 		write_size = 0,
 		write_timeout = -1,
 		read_blocked = false,
@@ -310,13 +335,13 @@ local function sock_wrap(handler, sock, is_connected)
 	if is_connected then
 		-- already connected don't need to call connected callback.
 		self.is_connecting = false
-		sock_connected_cb(self, status)
+		sock_connected_cb(self)
 	end
 
 	return self
 end
 
-local function sock_new_connect(handler, domain, _type, host, port, laddr, lport)
+local function sock_new_connect(handler, domain, _type, host, service, laddr, lport, sock_handshake_cb)
 	-- create nixio socket
 	local sock
 	if _type == 'stream' then
@@ -331,15 +356,30 @@ local function sock_new_connect(handler, domain, _type, host, port, laddr, lport
 		--n_assert(sock:setsockopt('socket', 'reuseaddr', 1))
 		n_assert(sock:bind(laddr, tonumber(lport or 0)))
 	end
-	-- connect to host:port
-	local ret, err, errno = sock:connect(host, port, function(status)
-		return sock_connected_cb(self, status)
-	end)
-	if not ret and errno ~= "EINPROGRESS" then
-		-- report error
-		sock_handle_error(self, err)
-		return nil, err
-	end
+
+    resolver.getaddr(host, service, domain, _type, function(ip,port,err)
+        if not ip then
+            sock_handle_error(self,err)
+            return nil,err
+        end
+
+        -- connect to host:port
+        local ret, err, errno = sock:connect(ip, port, function(status)
+	        if sock_handshake_cb then
+		        return sock_handshake_cb(self, status)
+	        else
+		        return sock_connected_cb(self, status)
+	        end
+        end)
+        if not ret and errno ~= "EINPROGRESS" then
+            -- report error
+            sock_handle_error(self, err)
+            return nil, err
+        end
+
+    end)
+
+
 	return self
 end
 
@@ -362,12 +402,12 @@ function tcp6(handler, host, port, laddr, lport)
 	return sock_new_connect(handler, 'inet6', 'stream', host, port, laddr, lport)
 end
 
-function tcp(handler, host, port, laddr, lport)
-	if host:sub(1,1) == '[' then
-		return tcp6(handler, host, port, laddr, lport)
-	else
-		return sock_new_connect(handler, 'inet', 'stream', host, port, laddr, lport)
-	end
+function tcp(handler, host, port, laddr, lport, handshake_cb)
+    if host:sub(1,1) == '[' then
+        return tcp6(handler, host, port, laddr, lport)
+    else
+        return sock_new_connect(handler, 'inet', 'stream', host, port, laddr, lport, handshake_cb)
+    end
 end
 
 function udp6(handler, host, port, laddr, lport)
@@ -399,11 +439,19 @@ end
 -- TCP TLS sockets
 --
 function tls_tcp(handler, host, port, tls, is_client, laddr, lport)
-	error('Not implemented yet')
-	local self = tcp(handler, host, port, laddr, lport)
-	-- default to client-side TLS
-	if is_client == nil then is_client = true end
-	return sock_tls_wrap(self, tls, is_client)
+	--error('Not implemented yet')
+	return tcp(handler, host, port, laddr, lport, function(self, status)
+		-- default to client-side TLS
+		if is_client == nil then is_client = true end
+		sock_tls_wrap(self, tls, is_client, function(err, ssocket)
+			if err then
+				sock_handle_error(self,err)
+				return;
+			end
+			self.sock = ssocket
+			return sock_connected_cb(self, status)
+		end)
+	end)
 end
 
 function tls_tcp6(handler, host, port, tls, is_client, laddr, lport)
@@ -451,6 +499,7 @@ function uri(handler, uri)
 			local is_client = (mode == 'client')
 			-- default to client-side
 			-- create TLS context
+--[[
 			error('Not implemented yet')
 			local tls = nixio.tls(mode)
 			-- set key
@@ -465,6 +514,16 @@ function uri(handler, uri)
 			if q.ciphers then
 				tls:set_ciphers(q.ciphers)
 			end
+--]]
+			local tls = {
+				protocol = q.protocol,
+				key = q.key,
+				cert = q.cert,
+				ca = q.ca,
+				ciphers = q.ciphers,
+				insecure = q.insecure
+			}
+
 			if scheme == 'tls' then
 				return tls_tcp(handler, host, port, tls, is_client, q.laddr, q.lport)
 			elseif scheme == 'tls6' then
