@@ -32,6 +32,7 @@ luv = {
 	connection = "luv",
 	acceptor = "luv",
 	poller = "luv",
+	resolver = "luv",
 },
 nixio_luv = {
 	name = "nixio_luv",
