@@ -25,6 +25,7 @@ local assert = assert
 local tconcat = table.concat
 local tremove = table.remove
 local tinsert = table.insert
+local tonumber = tonumber
 
 local ltn12 = require"ltn12"
 

@@ -330,8 +330,6 @@ local function create_response_parser(self)
 	self.parser = parser
 end
 
-local write = require 'pl.pretty'.write
-local print = print
 module(...)
 
 function new(pool)
