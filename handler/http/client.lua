@@ -22,7 +22,7 @@ local setmetatable = setmetatable
 local print = print
 local assert = assert
 
-local nixio = require"nixio"
+--local nixio = require"nixio"
 
 local request = require"handler.http.client.request"
 local hosts = require"handler.http.client.hosts"
@@ -59,9 +59,10 @@ end
 
 function client_mt:get_tls_context()
 	local tls = self.tls
+	error("nixio not supported")
 	if not tls then
 		-- make default client-side TLS context.
-		tls = nixio.tls'client'
+--		tls = nixio.tls'client'
 		self.tls = tls
 	end
 	return tls
