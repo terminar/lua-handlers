@@ -19,6 +19,7 @@
 -- THE SOFTWARE.
 
 local setmetatable = setmetatable
+local type = type
 
 local http_headers = require'handler.http.headers'
 local dup_headers = http_headers.dup
@@ -120,9 +121,7 @@ function response_mt:close()
 	return self:write(nil)
 end
 
-module(...)
-
-function new(conn, req, default_headers)
+local function new(conn, req, default_headers)
 	return setmetatable({
 		connection = conn,
 		request = req,
@@ -130,5 +129,4 @@ function new(conn, req, default_headers)
 	}, response_mt)
 end
 
-setmetatable(_M, { __call = function(tab, ...) return new(...) end })
-
+return setmetatable({}, { __call = function(tab, ...) return new(...) end })
