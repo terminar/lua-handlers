@@ -140,10 +140,10 @@ function headers_mt.__newindex(headers, name, value)
 	rawset(headers, #headers + 1, norm)
 end
 
-module(...)
+local _M = {}
 
 local tmp = {}
-function new(headers)
+function _M.new(headers)
 	-- check if 'headers' has the same metatable already.
 	if getmetatable(headers) == headers_mt then
 		-- no need to re-convert this table.
@@ -180,7 +180,7 @@ function new(headers)
 	return setmetatable(headers, headers_mt)
 end
 
-function dup(src)
+function _M.dup(src)
 	local dst = {}
 	-- copy headers from src
 	for i=1,#src do
@@ -192,7 +192,7 @@ function dup(src)
 	return setmetatable(dst, headers_mt)
 end
 
-function copy_defaults(dst, src)
+function _M.copy_defaults(dst, src)
 	if dst == nil then
 		return dup(src)
 	end
@@ -209,7 +209,7 @@ function copy_defaults(dst, src)
 	return dst
 end
 
-function gen_headers(data, headers)
+function _M.gen_headers(data, headers)
 	local offset=#data
 	for i=1,#headers do
 		local name = headers[i]
@@ -228,7 +228,7 @@ function gen_headers(data, headers)
 	return offset
 end
 
-function gen_headers_buf(buf, headers)
+function _M.gen_headers_buf(buf, headers)
 	for i=1,#headers do
 		local name = headers[i]
 		local val = headers[name]
@@ -241,3 +241,4 @@ function gen_headers_buf(buf, headers)
 	end
 end
 
+return _M

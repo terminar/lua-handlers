@@ -20,6 +20,7 @@
 
 local setmetatable = setmetatable
 local print = print
+local tostring = tostring
 local assert = assert
 
 local handler = require"handler"
@@ -172,6 +173,7 @@ local function sock_handle_send_unblocked(self)
 end
 
 local function sock_send(self, data)
+
 	if self.is_connecting then
 		local connect_buf  = self.connect_buf
 		if not connect_buf then
@@ -187,11 +189,15 @@ local function sock_send(self, data)
 		return false, errno
 	end
 	local write_size = self.sock:write_queue_size()
+--[[	
+--TODO: FIXME! this blocks here!
 	if write_size > WRITE_HIGH and self.write_size < WRITE_HIGH then
+print("wsize > whigh, wsize < whigh")	
 		self.write_size = write_size
 		sock_reset_write_timeout(self)
 		return false, 'blocked'
 	end
+--]]	
 	return true
 end
 
@@ -391,18 +397,17 @@ local function strip_ipv6(ip6)
 	return ip6
 end
 
-module(...)
-
+local _M = {}
 --
 -- TCP/UDP/Unix sockets (non-tls)
 --
-function tcp6(handler, host, port, laddr, lport)
+function _M.tcp6(handler, host, port, laddr, lport)
 	host = strip_ipv6(host)
 	laddr = strip_ipv6(laddr)
 	return sock_new_connect(handler, 'inet6', 'stream', host, port, laddr, lport)
 end
 
-function tcp(handler, host, port, laddr, lport, handshake_cb)
+function _M.tcp(handler, host, port, laddr, lport, handshake_cb)
     if host:sub(1,1) == '[' then
         return tcp6(handler, host, port, laddr, lport)
     else
@@ -410,27 +415,27 @@ function tcp(handler, host, port, laddr, lport, handshake_cb)
     end
 end
 
-function udp6(handler, host, port, laddr, lport)
+function _M.udp6(handler, host, port, laddr, lport)
 	error('Not implemented yet')
 	host = strip_ipv6(host)
 	laddr = strip_ipv6(laddr)
 	return sock_new_connect(handler, 'inet6', 'dgram', host, port, laddr, lport)
 end
 
-function udp(handler, host, port, laddr, lport)
+function _M.udp(handler, host, port, laddr, lport)
 	error('Not implemented yet')
 	if host:sub(1,1) == '[' then
-		return udp6(handler, host, port, laddr, lport)
+		return _M.udp6(handler, host, port, laddr, lport)
 	else
 		return sock_new_connect(handler, 'inet', 'dgram', host, port, laddr, lport)
 	end
 end
 
-function unix(handler, path)
+function _M.unix(handler, path)
 	return sock_new_connect(handler, 'unix', 'stream', path)
 end
 
-function wrap_connected(handler, sock)
+function _M.wrap_connected(handler, sock)
 	-- wrap socket
 	return sock_wrap(handler, sock, true)
 end
@@ -438,9 +443,9 @@ end
 --
 -- TCP TLS sockets
 --
-function tls_tcp(handler, host, port, tls, is_client, laddr, lport)
+function _M.tls_tcp(handler, host, port, tls, is_client, laddr, lport)
 	--error('Not implemented yet')
-	return tcp(handler, host, port, laddr, lport, function(self, status)
+	return _M.tcp(handler, host, port, laddr, lport, function(self, status)
 		-- default to client-side TLS
 		if is_client == nil then is_client = true end
 		sock_tls_wrap(self, tls, is_client, function(err, ssocket)
@@ -454,15 +459,15 @@ function tls_tcp(handler, host, port, tls, is_client, laddr, lport)
 	end)
 end
 
-function tls_tcp6(handler, host, port, tls, is_client, laddr, lport)
+function _M.tls_tcp6(handler, host, port, tls, is_client, laddr, lport)
 	error('Not implemented yet')
-	local self = tcp6(handler, host, port, laddr, lport)
+	local self = _M.tcp6(handler, host, port, laddr, lport)
 	-- default to client-side TLS
 	if is_client == nil then is_client = true end
 	return sock_tls_wrap(self, tls, is_client)
 end
 
-function tls_wrap_connected(handler, sock, tls, is_client)
+function _M.tls_wrap_connected(handler, sock, tls, is_client)
 	error('Not implemented yet')
 	-- wrap socket
 	local self = sock_wrap(handler, sock, false)
@@ -474,7 +479,7 @@ end
 --
 -- URI
 --
-function uri(handler, uri)
+function _M.uri(handler, uri)
 	local orig_uri = uri
 	-- parse uri
 	uri = uri_parse(uri)
@@ -483,17 +488,17 @@ function uri(handler, uri)
 	local q = query_parse(uri.query)
 	-- use scheme to select socket type.
 	if scheme == 'unix' then
-		return unix(handler, uri.path)
+		return _M.unix(handler, uri.path)
 	else
 		local host, port = uri.host, uri.port or default_port
 		if scheme == 'tcp' then
-			return tcp(handler, host, port, q.laddr, q.lport)
+			return _M.tcp(handler, host, port, q.laddr, q.lport)
 		elseif scheme == 'tcp6' then
-			return tcp6(handler, host, port, q.laddr, q.lport)
+			return _M.tcp6(handler, host, port, q.laddr, q.lport)
 		elseif scheme == 'udp' then
-			return udp(handler, host, port, q.laddr, q.lport)
+			return _M.udp(handler, host, port, q.laddr, q.lport)
 		elseif scheme == 'udp6' then
-			return udp6(handler, host, port, q.laddr, q.lport)
+			return _M.udp6(handler, host, port, q.laddr, q.lport)
 		else
 			local mode = q.mode or 'client'
 			local is_client = (mode == 'client')
@@ -525,9 +530,9 @@ function uri(handler, uri)
 			}
 
 			if scheme == 'tls' then
-				return tls_tcp(handler, host, port, tls, is_client, q.laddr, q.lport)
+				return _M.tls_tcp(handler, host, port, tls, is_client, q.laddr, q.lport)
 			elseif scheme == 'tls6' then
-				return tls_tcp6(handler, host, port, tls, is_client, q.laddr, q.lport)
+				return _M.tls_tcp6(handler, host, port, tls, is_client, q.laddr, q.lport)
 			end
 		end
 	end
@@ -535,5 +540,6 @@ function uri(handler, uri)
 end
 
 -- export
-wrap = sock_wrap
+_M.wrap = sock_wrap
 
+return _M

@@ -31,7 +31,7 @@ local uv = require'luv'
 
 local connection = require"handler.connection"
 local wrap_connected = connection.wrap_connected
-local tls_connection = require"handler.connection.tls_backend"
+--local tls_connection = require"handler.connection.tls_backend"
 local tls_wrap_connected = connection.tls_wrap_connected
 
 local uri_mod = require"handler.uri"
@@ -164,9 +164,9 @@ local function sock_new_bind_listen(handler, domain, _type, host, port, tls, bac
 	return self
 end
 
-module(...)
+local _M = {}
 
-function tcp6(handler, host, port, backlog)
+function _M.tcp6(handler, host, port, backlog)
 	-- remove '[]' from IPv6 addresses
 	if host:sub(1,1) == '[' then
 		host = host:sub(2,-2)
@@ -174,15 +174,15 @@ function tcp6(handler, host, port, backlog)
 	return sock_new_bind_listen(handler, 'inet6', 'stream', host, port, nil, backlog)
 end
 
-function tcp(handler, host, port, backlog)
+function _M.tcp(handler, host, port, backlog)
 	if host:sub(1,1) == '[' then
-		return tcp6(handler, host, port, backlog)
+		return _M.tcp6(handler, host, port, backlog)
 	else
 		return sock_new_bind_listen(handler, 'inet', 'stream', host, port, nil, backlog)
 	end
 end
 
-function tls_tcp6(handler, host, port, tls, backlog)
+function _M.tls_tcp6(handler, host, port, tls, backlog)
 	error('Not implemented yet!')
 	-- remove '[]' from IPv6 addresses
 	if host:sub(1,1) == '[' then
@@ -191,16 +191,16 @@ function tls_tcp6(handler, host, port, tls, backlog)
 	return sock_new_bind_listen(handler, 'inet6', 'stream', host, port, tls, backlog)
 end
 
-function tls_tcp(handler, host, port, tls, backlog)
+function _M.tls_tcp(handler, host, port, tls, backlog)
 	error('Not implemented yet!')
 	if host:sub(1,1) == '[' then
-		return tls_tcp6(handler, host, port, tls, backlog)
+		return _M.tls_tcp6(handler, host, port, tls, backlog)
 	else
 		return sock_new_bind_listen(handler, 'inet', 'stream', host, port, tls, backlog)
 	end
 end
 
-function udp6(handler, host, port, backlog)
+function _M.udp6(handler, host, port, backlog)
 	error('Not implemented yet!')
 	-- remove '[]' from IPv6 addresses
 	if host:sub(1,1) == '[' then
@@ -209,10 +209,10 @@ function udp6(handler, host, port, backlog)
 	return sock_new_bind_listen(handler, 'inet6', 'dgram', host, port, nil, backlog)
 end
 
-function udp(handler, host, port, backlog)
+function _M.udp(handler, host, port, backlog)
 	error('Not implemented yet!')
 	if host:sub(1,1) == '[' then
-		return udp6(handler, host, port, backlog)
+		return _M.udp6(handler, host, port, backlog)
 	else
 		return sock_new_bind_listen(handler, 'inet', 'dgram', host, port, nil, backlog)
 	end
@@ -231,7 +231,7 @@ function unix(handler, path, backlog)
 	return sock_new_bind_listen(handler, 'unix', 'stream', path, nil, nil, backlog)
 end
 
-function uri(handler, uri, backlog, default_port)
+function _M.uri(handler, uri, backlog, default_port)
 	local orig_uri = uri
 	-- parse uri
 	uri = uri_parse(uri)
@@ -244,17 +244,17 @@ function uri(handler, uri, backlog, default_port)
 	end
 	-- use scheme to select socket type.
 	if scheme == 'unix' then
-		return unix(handler, uri.path, backlog)
+		return _M.unix(handler, uri.path, backlog)
 	else
 		local host, port = uri.host, uri.port or default_port
 		if scheme == 'tcp' then
-			return tcp(handler, host, port, backlog)
+			return _M.tcp(handler, host, port, backlog)
 		elseif scheme == 'tcp6' then
-			return tcp6(handler, host, port, backlog)
+			return _M.tcp6(handler, host, port, backlog)
 		elseif scheme == 'udp' then
-			return udp(handler, host, port, backlog)
+			return _M.udp(handler, host, port, backlog)
 		elseif scheme == 'udp6' then
-			return udp6(handler, host, port, backlog)
+			return _M.udp6(handler, host, port, backlog)
 		else
 			-- create TLS context
 			local tls = nixio.tls(q.mode or 'server') -- default to server-side
@@ -271,12 +271,13 @@ function uri(handler, uri, backlog, default_port)
 				tls:set_ciphers(q.ciphers)
 			end
 			if scheme == 'tls' then
-				return tls_tcp(handler, host, port, tls, backlog)
+				return _M.tls_tcp(handler, host, port, tls, backlog)
 			elseif scheme == 'tls6' then
-				return tls_tcp6(handler, host, port, tls, backlog)
+				return _M.tls_tcp6(handler, host, port, tls, backlog)
 			end
 		end
 	end
 	error("Unknown listen URI scheme: " .. scheme)
 end
 
+return _M

@@ -132,10 +132,11 @@ function poll_mt:get_loop()
 	return uv.backend_fd()
 end
 
-module(...)
+local _M = {}
 
-function new()
+function _M.new()
 	return setmetatable({
 	}, poll_mt)
 end
 
+return _M

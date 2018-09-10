@@ -73,9 +73,9 @@ local function parse_path_query_fragment(uri, off)
 	return path or '/', query, fragment, off
 end
 
-module(...)
+local _M = {}
 
-function parse(uri, info, path_only)
+function _M.parse(uri, info, path_only)
 	local off = 1
 	info = info or {}
 	-- check if uri has a scheme
@@ -133,7 +133,7 @@ local function urlencode(val)
 end
 _M.urlencode = urlencode
 
-function parse_query(query, values)
+function _M.parse_query(query, values)
 	query = query or ''
 	values = values or {}
 	-- parse name/value pairs
@@ -156,5 +156,6 @@ function parse_query(query, values)
 	return values
 end
 
-setmetatable(_M, { __call = function(tab, ...) return parse(...) end })
+setmetatable(_M, { __call = function(tab, ...) return _M.parse(...) end })
 
+return _M

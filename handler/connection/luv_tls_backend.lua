@@ -1,5 +1,6 @@
 
 local openssl = require('openssl')
+
 local bit = require('bit32')
 
 local DEFAULT_CIPHERS = 'ECDHE-RSA-AES128-SHA256:AES128-GCM-SHA256:' .. -- TLS 1.2
@@ -189,6 +190,8 @@ local function init(self, options, is_client, callback)
   end)
 end
 
-module(...)
+local _M = {}
 
-wrap = init
+_M.wrap = init
+
+return _M
